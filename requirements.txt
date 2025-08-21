@@ -12,3 +12,8 @@ xgboost==2.1.1
 python-dotenv==1.0.1
 loguru==0.7.2
 aiosqlite==0.20.0
+statsmodels==0.14.2
+statsmodels==0.14.2
+neuralforecast>=1.7.4
+pytorch-lightning>=2.3.0
+torch>=2.2
