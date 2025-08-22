@@ -1,72 +1,46 @@
-# data_ingestion.py
-import requests
-import json
+import os
 from datetime import datetime
-import ssl
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.poolmanager import PoolManager
+from dotenv import load_dotenv
+from core.api.suseong_ingestion import fetch_and_save_population_data
 
-# ❗ 오래된 시스템 환경에서 최신 TLS 버전을 강제하기 위한 클래스
-class TLSv12Adapter(HTTPAdapter):
-    def init_poolmanager(self, connections, maxsize, block=False):
-        self.poolmanager = PoolManager(
-            num_pools=connections,
-            maxsize=maxsize,
-            block=block,
-            ssl_version=ssl.PROTOCOL_TLSv1_2
-        )
+load_dotenv()
 
-API_KEY = "99f35826b78e6d4ae93b2777b6dcd30bfc588f55374c8683f069e02b419d213d"
-BASE_URL = "https://apis.data.go.kr/3460000/suseongfpa/viewdaypopudetail"
-
-def fetch_and_save_population_data():
+def run_data_ingestion():
     """
-    API를 호출하여 주간 유동인구 데이터를 가져오고 DB에 저장합니다.
+    주간, 상권 유동인구 데이터를 과거부터 현재까지 모두 가져와 DB에 저장합니다.
     """
-    params = {
-        'serviceKey': API_KEY,
-        'startYear': '2021',
-        'startBungi': '4',
-        'resultType': 'json',
-        'page': '1',
-        'size': '100'
-    }
-
-    # ❗ TLSv1.2 어댑터를 사용하는 세션을 생성
-    session = requests.Session()
-    session.mount('https://', TLSv12Adapter())
+    print("공공데이터 API에서 모든 종류의 유동인구 데이터 수집을 시작합니다...")
     
-    try:
-        # ❗ 기본 requests.get 대신 위에서 만든 session.get을 사용
-        response = session.get(BASE_URL, params=params, timeout=10)
-        response.raise_for_status()
+    data_sources = {
+        "daytime": "https://apis.data.go.kr/3460000/suseongfpa/viewdaypopudetail",
+        "commercial": "https://apis.data.go.kr/3460000/suseongfpa/viewmarketpopudetail"
+    }
+    
+   
+    start_year = 2021
+    start_quarter = 4
+    
+   
+    now = datetime.now()
+    current_year = now.year
+    current_quarter = (now.month - 1) // 3 + 1
+    
+    year, quarter = start_year, start_quarter
+    
+   
+    while year < current_year or (year == current_year and quarter <= current_quarter):
+     
+        for data_type, api_url in data_sources.items():
+            print(f"--> {year}년 {quarter}분기 [{data_type}] 데이터 수집 중...")
+            fetch_and_save_population_data(api_url, data_type, year=year, quarter=quarter)
         
-        data = response.json()
-        
-        if 'response' in data and 'body' in data['response'] and 'items' in data['response']['body']:
-            body = data['response']['body']
-            report_date = body.get('bungiNm1')
+       
+        quarter += 1
+        if quarter > 4:
+            quarter = 1
+            year += 1
             
-            population_records = []
-            for item in body['items']:
-                record = {
-                    'region_id': item.get('cctvUid'),
-                    'date': report_date,
-                    'time_slot': 'daytime',
-                    'population_count': item.get('cctvCount')
-                }
-                population_records.append(record)
-
-            print(f"[{datetime.now()}] {len(population_records)}개의 주간 유동인구 데이터를 성공적으로 처리했습니다.")
-        else:
-            print(f"[{datetime.now()}] API 응답에서 유효한 데이터를 찾을 수 없습니다.")
-            print("API 응답 내용:", data)
-            
-    except requests.exceptions.RequestException as e:
-        print(f"[{datetime.now()}] API 호출 중 오류 발생: {e}")
-    except json.JSONDecodeError:
-        print(f"[{datetime.now()}] JSON 디코딩 오류 발생")
-        print("응답 내용:", response.text)
+    print("모든 기간의 데이터 수집 완료.")
 
 if __name__ == "__main__":
-    fetch_and_save_population_data()
+    run_data_ingestion()
