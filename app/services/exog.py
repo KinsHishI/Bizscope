@@ -38,7 +38,7 @@ async def get_latest_quarter_foot_traffic(
             Place.lon.between(lon - d, lon + d),
         )
     else:
-        # 전체 평균(또는 합계). 간단히 전체 평균으로.
+        # 전체 평균(또는 합계)
         stmt = select(func.avg(Place.foot_traffic))
 
     res = await db.execute(stmt)

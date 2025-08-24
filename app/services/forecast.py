@@ -6,11 +6,15 @@
 # -----------------------------------------------------------------------------
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable, Sequence
-
 import numpy as np
 import pandas as pd
+
+from dataclasses import dataclass
+from typing import Iterable, Sequence
+from sqlalchemy import select
+from app.db.models import (
+    FootTrafficQuarter,
+)  # 분기 유동인구 테이블: year, quarter, lat, lon, pop
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 from app.schemas.finance import (
@@ -48,7 +52,7 @@ def _assumptions_to_cost(a_like) -> CostAssumptions:
     elif isinstance(a_like, dict):
         data = a_like
     else:
-        # 마지막 안전망: 필요한 필드만 뽑아서 dict화
+        # 필요한 필드만 뽑아서 dict화
         fields = ("cogs_rate", "labor_base", "rent", "utilities", "marketing")
         data = {k: getattr(a_like, k) for k in fields if hasattr(a_like, k)}
     return CostAssumptions(**data)
@@ -59,6 +63,42 @@ def _to_month_index(series: Sequence[FinancePoint]) -> pd.Series:
     idx = pd.PeriodIndex([p.month for p in series], freq="M")
     vals = [p.sales for p in series]
     return pd.Series(vals, index=idx)
+
+
+def _quarter_to_months(year: int, quarter: int) -> list[pd.Period]:
+    # Q1 -> 1,2,3 / Q2 -> 4,5,6 ...
+    start_month = 3 * (quarter - 1) + 1
+    return [
+        pd.Period(f"{year}-{m:02d}", freq="M")
+        for m in range(start_month, start_month + 3)
+    ]
+
+
+def _build_exog_from_quarters(
+    y_index: pd.PeriodIndex,
+    rows: list[FootTrafficQuarter],
+    method: str = "uniform",  # uniform | weighted
+) -> pd.Series | None:
+    # 분기 값 → 월로 분배하여 y_index 기간을 커버하는 exog Series 생성
+    exog = pd.Series(0.0, index=y_index, dtype="float64")
+    for r in rows:
+        months = _quarter_to_months(r.year, r.quarter)
+        # 균등 or 가중 분배(예: [0.3, 0.3, 0.4])
+        if method == "weighted":
+            weights = np.array([0.30, 0.30, 0.40])
+        else:
+            weights = np.array([1 / 3, 1 / 3, 1 / 3])
+        for m, w in zip(months, weights):
+            if m in exog.index:
+                exog.loc[m] += float(r.pop) * float(w)
+
+    # 모두 0 또는 분산 0이면 None
+    if exog.sum() == 0 or exog.std(ddof=0) == 0:
+        return None
+
+    # Z-score 표준화
+    exog = (exog - exog.mean()) / (exog.std(ddof=0) + 1e-8)
+    return exog
 
 
 def _calc_costs(sales: int, a: CostAssumptions) -> dict:
@@ -133,6 +173,42 @@ def forecast_finance(req: FinanceForecastRequest) -> FinanceForecastResponse:
 
 
 # ── AUTO: 수성구 유동인구 → 월 분할 → 외생변수로 결합 ─────────────────────────
+def _quarter_to_months(year: int, quarter: int) -> list[pd.Period]:
+    # Q1 -> 1,2,3 / Q2 -> 4,5,6 ...
+    start_month = 3 * (quarter - 1) + 1
+    return [
+        pd.Period(f"{year}-{m:02d}", freq="M")
+        for m in range(start_month, start_month + 3)
+    ]
+
+
+def _build_exog_from_quarters(
+    y_index: pd.PeriodIndex,
+    rows: list[FootTrafficQuarter],
+    method: str = "uniform",  # uniform | weighted
+) -> pd.Series | None:
+    # 분기 값 → 월로 분배하여 y_index 기간을 커버하는 exog Series 생성
+    exog = pd.Series(0.0, index=y_index, dtype="float64")
+    for r in rows:
+        months = _quarter_to_months(r.year, r.quarter)
+        # 균등 or 가중 분배(예: [0.3, 0.3, 0.4])
+        if method == "weighted":
+            weights = np.array([0.30, 0.30, 0.40])
+        else:
+            weights = np.array([1 / 3, 1 / 3, 1 / 3])
+        for m, w in zip(months, weights):
+            if m in exog.index:
+                exog.loc[m] += float(r.pop) * float(w)
+
+    # 모두 0 또는 분산 0이면 None
+    if exog.sum() == 0 or exog.std(ddof=0) == 0:
+        return None
+
+    # Z-score 표준화
+    exog = (exog - exog.mean()) / (exog.std(ddof=0) + 1e-8)
+    return exog
+
+
 async def forecast_finance_auto(
     db: AsyncSession,
     req: FinanceForecastAutoRequest,
@@ -140,24 +216,30 @@ async def forecast_finance_auto(
     lat: float | None,
     lon: float | None,
 ) -> FinanceForecastAutoResponse:
-    """
-    사용자가 보낸 최근 n개월 매출 + (선택) lat/lon 근처의 '분기 유동인구'를 월로 분할해 exog 구성
-    """
-    a = _assumptions_to_cost(req.assumptions)
+    assump_dict = req.assumptions.model_dump() if req.assumptions else {}
+    a = CostAssumptions(**assump_dict)
     y = _to_month_index(req.series).asfreq("M")
     h = req.horizon_months
 
-    # 1) 외생변수(exog) 준비
     exog_hist: pd.Series | None = None
-    if lat is not None and lon is not None:
-        d = 0.0005  # 약 100m bbox
-        places = await get_places_bbox(db, lat - d, lon - d, lat + d, lon + d)
-        if places:
-            base_pop = max(getattr(p, "foot_traffic", 0) or 0 for p in places)
-            months_pop = pd.Series([base_pop / 3] * len(y), index=y.index)
-            exog_hist = months_pop
+    model_name = "SARIMAX"
 
-    # 2) 모델 적합
+    if lat is not None and lon is not None:
+        # 근처 분기 유동인구 rows를 불러옴 (예: 반경 ~300m 박스)
+        d = 0.0027  # ~300m
+        stmt = (
+            select(FootTrafficQuarter)
+            .where(FootTrafficQuarter.lat.between(lat - d, lat + d))
+            .where(FootTrafficQuarter.lon.between(lon - d, lon + d))
+            .order_by(FootTrafficQuarter.year, FootTrafficQuarter.quarter)
+        )
+        res = await db.execute(stmt)
+        rows = res.scalars().all()
+
+        if rows:
+            exog_hist = _build_exog_from_quarters(y.index, rows, method="uniform")
+
+    # 모델 적합
     if exog_hist is not None:
         model = SARIMAX(
             y,
@@ -166,12 +248,15 @@ async def forecast_finance_auto(
             seasonal_order=(1, 1, 1, 12),
             enforce_stationarity=False,
             enforce_invertibility=False,
+            trend="n",  # exog 상수 비활성화
         )
         fit = model.fit(disp=False)
-        future_exog = pd.Series(
-            [exog_hist.iloc[-1]] * h,
-            index=pd.period_range(y.index[-1] + 1, periods=h, freq="M"),
-        )
+
+        # 미래 exog: 마지막 분기값 기준
+        last_val = float(exog_hist.iloc[-1])
+        future_index = pd.period_range(y.index[-1] + 1, periods=h, freq="M")
+        future_exog = pd.Series([last_val] * h, index=future_index, dtype="float64")
+
         fcast = fit.get_forecast(steps=h, exog=future_exog)
         model_name = "SARIMAX+exog(foot_traffic)"
     else:
@@ -184,7 +269,6 @@ async def forecast_finance_auto(
         )
         fit = model.fit(disp=False)
         fcast = fit.get_forecast(steps=h)
-        model_name = "SARIMAX"
 
     mean = fcast.predicted_mean
     months = pd.period_range(start=y.index[-1] + 1, periods=h, freq="M")
@@ -205,6 +289,6 @@ async def forecast_finance_auto(
         top_features=None,
         explain=[
             f"원가율 {a.cogs_rate:.2f}, 인건비 base {a.labor_base:,}",
-            "유동인구는 분기→월 균등 분할 가정",
+            "유동인구: 분기→월 분할 + Z-score 표준화",
         ],
     )

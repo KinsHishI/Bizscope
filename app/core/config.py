@@ -40,7 +40,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,  # .env 의 소문자 키도 허용
-        extra="ignore",  # 알 수 없는 키 무시(에러 대신)
+        extra="ignore",  # 알 수 없는 키 무시
     )
 
 

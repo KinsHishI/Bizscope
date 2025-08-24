@@ -2,7 +2,6 @@
 # -----------------------------------------------------------------------------
 # FastAPI 엔트리포인트
 # - 서버 기동 시 테이블 생성
-# - 옵션: 자동 부트스트랩(AUTO_INGEST_SUSEONG)
 # -----------------------------------------------------------------------------
 from fastapi import FastAPI
 from app.core.config import settings
@@ -25,14 +24,14 @@ async def on_startup():
         async def _bg_bootstrap():
             from sqlalchemy.ext.asyncio import AsyncSession
 
-            async for db in get_session():  # 간단히 세션 하나 빌려서
+            async for db in get_session():
                 await bootstrap_suseong(db)
                 break
 
         asyncio.create_task(_bg_bootstrap())
 
 
-# 필요한 라우터만 include (미사용시 주석처리 가능)
+# 필요한 라우터만 include
 app.include_router(finance.router)
 app.include_router(admin.router)
 app.include_router(analysis.router)

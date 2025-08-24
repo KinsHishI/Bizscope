@@ -20,7 +20,7 @@ class FinanceAssumption(BaseModel):
 
 
 class FinanceForecastRequest(BaseModel):
-    series: List[FinancePoint] = Field(min_length=3)  # 최소 3개월 권장
+    series: List[FinancePoint] = Field(min_length=3)  # 최소 3개월
     capex: int
     horizon_months: int = 12
     assumptions: Optional[FinanceAssumption] = None
@@ -29,7 +29,7 @@ class FinanceForecastRequest(BaseModel):
 class ForecastItem(BaseModel):
     month: str
     sales: int
-    sales_pi: List[int]  # [low, high] 자리만 유지(간단 버전)
+    sales_pi: List[int]  # [low, high]
     cogs: int
     labor: int
     rent: int

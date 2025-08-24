@@ -10,7 +10,7 @@ from pathlib import Path
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True, parents=True)
 
-logger.remove()  # 기본 핸들러 제거(중복 방지)
+logger.remove()  # 기본 핸들러 제거
 logger.add(
     LOG_DIR / "app.log",
     rotation="10 MB",
