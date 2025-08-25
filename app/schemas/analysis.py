@@ -4,9 +4,9 @@ from pydantic import BaseModel, Field
 from typing import Dict, Optional
 
 
-class AnalysisRequest(BaseModel):  # ← 이름만 변경
+class AnalysisRequest(BaseModel):
     lat: float
-    lng: float
+    lon: float
     radius_m: int = Field(2000, ge=100, le=5000)
 
 
@@ -29,8 +29,4 @@ class AnalysisResult(BaseModel):
     reasoning: ReasoningDetails
     competitor_analysis: CompetitorAnalysis
     lat: float
-    lng: float
-
-
-AnalysisAreaRequest = AnalysisRequest
-AnalysisAreaResponse = AnalysisResult
+    lon: float

@@ -1,78 +1,52 @@
-# app/routers/analysis.py
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.session import get_session
 from app.schemas.analysis import (
     AnalysisRequest,
     AnalysisResult,
     CompetitorAnalysis,
     ReasoningDetails,
 )
-from app.services.analyzer import (
-    get_nearby_stores,
-    get_nearby_cafes,
-    save_stores_data,
-)
+from app.services.analyzer import find_places_nearby
+import traceback
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
 
 @router.post("/area", response_model=AnalysisResult)
-def analyze_area(request: AnalysisRequest):
+async def analyze_area(req: AnalysisRequest, db: AsyncSession = Depends(get_session)):
     try:
-        # 1) DB에서 반경 내 점포 조회
-        stores_from_db = get_nearby_stores(
-            request.lat, request.lon, radius_km=request.radius_m / 1000
+        # 반경(m) → km
+        radius_km = req.radius_m / 1000
+        places = await find_places_nearby(
+            db, lat=req.lat, lon=req.lon, radius_km=radius_km
         )
 
-        # 2) 없으면 카카오맵에서 가져오고 DB에 저장
-        if not stores_from_db:
-            cafes = get_nearby_cafes(
-                request.lat, request.lon, radius_m=request.radius_m
-            )
-            if cafes:
-                save_stores_data(
-                    [
-                        {
-                            "place_name": c.get("place_name"),
-                            "category_name": c.get("category_name"),
-                            "y": float(c.get("y")),
-                            "x": float(c.get("x")),
-                        }
-                        for c in cafes
-                    ]
-                )
-            stores_to_analyze = cafes
-        else:
-            stores_to_analyze = stores_from_db
+        # ── 예시 스코어링 ──
+        competitor_count = len(places)
+        franchise = sum(1 for p in places if (p.category or "").find("프랜차이즈") >= 0)
+        personal = competitor_count - franchise
+        floating_population = 0  # 필요 시 FTQ/예측 결합 예정
 
-        # 3) 간단한 요약
-        competitor_cnt = len(stores_to_analyze) if stores_to_analyze else 0
-        franchise_cnt = sum(
-            1
-            for s in stores_to_analyze or []
-            if "스타벅스" in str(s.get("place_name", ""))
-            or "이디야" in str(s.get("place_name", ""))
-        )
-        personal_cnt = max(0, competitor_cnt - franchise_cnt)
-
-        reasoning = ReasoningDetails(
-            competitor_count=competitor_cnt,
-            franchise_count=franchise_cnt,
-            personal_count=personal_cnt,
-            floating_population=0,
-            radius_km=request.radius_m // 1000,
-        )
-        competitor = CompetitorAnalysis(
-            count=competitor_cnt,
-            types={"franchise": franchise_cnt, "personal": personal_cnt},
-            avg_rating=None,
-        )
-
-        score = max(0, 100 - int(competitor_cnt * 1.5))
+        # 경쟁 적을수록 가점 (아주 단순한 예시)
+        score = max(0, min(100, 80 - competitor_count + (floating_population // 10000)))
 
         return AnalysisResult(
-            suitability_score=score,
-            reasoning=reasoning,
-            competitor_analysis=competitor,
+            suitability_score=int(score),
+            reasoning=ReasoningDetails(
+                competitor_count=competitor_count,
+                franchise_count=franchise,
+                personal_count=personal,
+                floating_population=floating_population,
+                radius_km=int(radius_km),
+            ),
+            competitor_analysis=CompetitorAnalysis(
+                count=competitor_count,
+                types={"franchise": franchise, "personal": personal},
+                avg_rating=None,
+            ),
+            lat=req.lat,
+            lon=req.lon,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")

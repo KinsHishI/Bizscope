@@ -1,160 +1,100 @@
-import sqlite3
+# app/services/analyzer.py
+from __future__ import annotations
 import requests
-from typing import List, Dict
-from datetime import datetime
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
-from app.services.population_predictor import predict_population
+from app.db import crud
 
-DATABASE_NAME = "space.db"
 KAKAO_API_KEY = settings.KAKAO_API_KEY
 
 
-FRANCHISE_LIST = [
-    "스타벅스",
-    "투썸플레이스",
-    "이디야",
-    "메가엠지씨커피",
-    "컴포즈커피",
-    "빽다방",
-    "폴바셋",
-    "할리스",
-    "커피빈",
-    "탐앤탐스",
-    "파스쿠찌",
-    "엔제리너스",
-]
-
-
-def flow_score(num_poi: int, transit_nodes: int) -> float:
-    return min(1.0, 0.2 + 0.6 * (num_poi / 30) + 0.2 * (transit_nodes / 5))
-
-
-def competition_density(competitor_count: int) -> float:
-    return min(1.0, competitor_count / 40)
-
-
-def analyze_business_area(lat: float, lon: float, nearby_cafes: List[Dict]):
-    competitor_count = len(nearby_cafes)
-
-    now = datetime.now()
-    pop = predict_population(now.year, (now.month - 1) // 3 + 1) or 0.0
-    if pop <= 0:
-        pop = 50_000
-
-    num_poi_approx = int(pop / 2000)
-    transit_nodes_approx = int(pop / 10000)
-
-    flow = flow_score(num_poi_approx, transit_nodes_approx)
-    comp = competition_density(competitor_count)
-
-    suitability = (flow * 0.7 - comp * 0.3) * 100
-    suitability = max(0, min(100, suitability))
-
-    franchise_count = sum(
-        1
-        for c in nearby_cafes
-        if any((c.get("name") or "").startswith(f) for f in FRANCHISE_LIST)
-    )
-    personal_count = competitor_count - franchise_count
-
-    reasoning = {
-        "competitor_count": competitor_count,
-        "franchise_count": franchise_count,
-        "personal_count": personal_count,
-        "floating_population": int(pop),
-        "radius_km": 2,
-    }
-    competitor = {
-        "count": competitor_count,
-        "types": {"franchise": franchise_count, "personal": personal_count},
-        "avg_rating": 4.0,
-    }
-    return int(suitability), reasoning, competitor
-
-
-def get_nearby_stores(lat, lng, radius_km=2):
+async def fetch_kakao_cafes(lat: float, lon: float, radius_m: int = 2000) -> list[dict]:
     """
-    특정 위치(lat, lng) 반경 내에 있는 상점 데이터를 가져옵니다.
-    """
-    with sqlite3.connect(DATABASE_NAME) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            SELECT *,
-            (
-                6371 * acos(
-                    cos(radians(?)) * cos(radians(y)) * cos(radians(x) - radians(?)) +
-                    sin(radians(?)) * sin(radians(y))
-                )
-            ) AS distance_km
-            FROM stores
-            HAVING distance_km <= ?
-            ORDER BY distance_km
-        """,
-            (lat, lng, lat, radius_km),
-        )
-
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
-
-
-def save_stores_data(records):
-    """
-    상점 데이터를 DB에 저장합니다.
-    """
-    with sqlite3.connect(DATABASE_NAME) as conn:
-        cursor = conn.cursor()
-        cursor.executemany(
-            """
-            INSERT INTO stores (place_name, category_name, y, x)
-            VALUES (:place_name, :category_name, :y, :x)
-        """,
-            records,
-        )
-        conn.commit()
-    print(f"✅ Saved {len(records)} store records.")
-
-
-def get_nearby_cafes(lat: float, lng: float, radius_m=2000):
-    """
-    카카오맵 API로 반경 내 카페를 가져옵니다.
+    카카오 카테고리 검색(카페: CE7) 호출. 원본 문서 리스트 반환.
     """
     url = "https://dapi.kakao.com/v2/local/search/category.json"
     headers = {"Authorization": f"KakaoAK {KAKAO_API_KEY}"}
-
-    all_cafes = []
+    out: list[dict] = []
     page = 1
-
     while True:
         params = {
             "category_group_code": "CE7",
-            "x": lng,
+            "x": lon,
             "y": lat,
             "radius": radius_m,
             "sort": "distance",
             "page": page,
         }
-
-        try:
-            response = requests.get(url, params=params, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-
-            cafes_on_page = data.get("documents", [])
-            if not cafes_on_page:
-                break
-
-            all_cafes.extend(cafes_on_page)
-
-            if data["meta"]["is_end"] or page >= 3:
-                break
-
-            page += 1
-
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Kakao API error (page {page}): {e}")
+        r = requests.get(url, headers=headers, params=params, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        docs = data.get("documents", []) or []
+        if not docs:
             break
+        out.extend(docs)
+        meta = data.get("meta", {}) or {}
+        if meta.get("is_end") or page >= 3:
+            break
+        page += 1
+    return out
 
-    return all_cafes
+
+def _kakao_docs_to_places(docs: list[dict]) -> list[dict]:
+    """
+    Kakao 문서를 Place insert용 dict로 매핑.
+    - name, category, lat(y), lon(x)
+    """
+    places = []
+    for d in docs:
+        try:
+            places.append(
+                {
+                    "name": d.get("place_name") or "상호",
+                    "category": d.get("category_name") or "카페",
+                    "lat": float(d.get("y")),
+                    "lon": float(d.get("x")),
+                }
+            )
+        except Exception:
+            continue
+    return places
+
+
+async def upsert_kakao_places(db: AsyncSession, docs: list[dict]) -> int:
+    """
+    Kakao 문서를 Place로 저장(중복 방지). crud.save_kakao_places 사용.
+    """
+    to_save = _kakao_docs_to_places(docs)
+    if not to_save:
+        return 0
+    return await crud.save_kakao_places(db, to_save)
+
+
+from typing import Sequence
+from app.db.models import Place
+
+
+async def find_places_nearby(
+    db: AsyncSession, *, lat: float, lon: float, radius_km: float = 2.0
+) -> Sequence[Place]:
+    """
+    반경 rkm ≈ 위도/경도 상자 검색으로 근사. (1도 ≈ ~111km 가정)
+    """
+    deg = radius_km / 111.0
+    rows = await crud.get_places_bbox(db, lat - deg, lon - deg, lat + deg, lon + deg)
+    if rows:
+        return rows
+
+    # DB에 없으면 Kakao 호출 → 저장 → 재조회
+    docs = await fetch_kakao_cafes(lat, lon, int(radius_km * 1000))
+    if docs:
+        await upsert_kakao_places(db, docs)
+        rows = await crud.get_places_bbox(
+            db, lat - deg, lon - deg, lat + deg, lon + deg
+        )
+        if rows:
+            return rows
+
+    # 그래도 없으면 반경을 조금씩 키워서 시도 (선택)
+    rows = await crud.widen_bbox_places(db, lat, lon, radii=(0.01, 0.02, 0.03))
+    return rows
