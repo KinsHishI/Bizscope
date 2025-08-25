@@ -29,7 +29,7 @@
 
 1.  **프로젝트 클론 및 가상환경 설정**
     ```bash
-    git clone <레포지토리_주소>
+    git clone "https://github.com/KinsHishI/Bizscope.git"
     cd BizScope
     python3 -m venv venv
     source venv/bin/activate
