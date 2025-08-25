@@ -103,14 +103,14 @@ async def ingest_suseong_foot_traffic(
                 if not lat or not lon:
                     continue
 
-                # 유동인구(정수)
+                # 유동인구
                 pop_raw = it.get("popuCnt") or it.get("flowCnt") or it.get("total")
                 try:
                     pop = int(float(pop_raw))
                 except (TypeError, ValueError):
                     pop = 0
 
-                # upsert (두 테이블 다)
+                # upsert
                 await crud.upsert_place_with_foot_traffic(
                     db, name=name, lat=lat, lon=lon, foot_traffic=pop
                 )
@@ -120,7 +120,7 @@ async def ingest_suseong_foot_traffic(
 
                 total_ingested += 1
 
-            # 배치 커밋 (페이지마다)
+            # 배치 커밋
             await db.commit()
 
     return {

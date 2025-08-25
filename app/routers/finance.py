@@ -1,6 +1,6 @@
 # app/routers/finance.py
 # -----------------------------------------------------------------------------
-# /finance/forecast   : 유동인구(exog) 자동 결합 예측 (lat/lon 옵션)
+# /finance/forecast   : 유동인구(exog) 자동 결합 예측
 # -----------------------------------------------------------------------------
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession

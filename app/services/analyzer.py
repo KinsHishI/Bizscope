@@ -1,9 +1,12 @@
 # app/services/analyzer.py
+
 from __future__ import annotations
 import requests
+from typing import Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db import crud
+from app.db.models import Place
 
 KAKAO_API_KEY = settings.KAKAO_API_KEY
 
@@ -70,10 +73,6 @@ async def upsert_kakao_places(db: AsyncSession, docs: list[dict]) -> int:
     return await crud.save_kakao_places(db, to_save)
 
 
-from typing import Sequence
-from app.db.models import Place
-
-
 async def find_places_nearby(
     db: AsyncSession, *, lat: float, lon: float, radius_km: float = 2.0
 ) -> Sequence[Place]:
@@ -85,7 +84,6 @@ async def find_places_nearby(
     if rows:
         return rows
 
-    # DB에 없으면 Kakao 호출 → 저장 → 재조회
     docs = await fetch_kakao_cafes(lat, lon, int(radius_km * 1000))
     if docs:
         await upsert_kakao_places(db, docs)
@@ -95,6 +93,5 @@ async def find_places_nearby(
         if rows:
             return rows
 
-    # 그래도 없으면 반경을 조금씩 키워서 시도 (선택)
     rows = await crud.widen_bbox_places(db, lat, lon, radii=(0.01, 0.02, 0.03))
     return rows

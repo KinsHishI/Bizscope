@@ -16,19 +16,16 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 @router.post("/area", response_model=AnalysisResult)
 async def analyze_area(req: AnalysisRequest, db: AsyncSession = Depends(get_session)):
     try:
-        # 반경(m) → km
         radius_km = req.radius_m / 1000
         places = await find_places_nearby(
             db, lat=req.lat, lon=req.lon, radius_km=radius_km
         )
 
-        # ── 예시 스코어링 ──
         competitor_count = len(places)
         franchise = sum(1 for p in places if (p.category or "").find("프랜차이즈") >= 0)
         personal = competitor_count - franchise
-        floating_population = 0  # 필요 시 FTQ/예측 결합 예정
+        floating_population = 0
 
-        # 경쟁 적을수록 가점 (아주 단순한 예시)
         score = max(0, min(100, 80 - competitor_count + (floating_population // 10000)))
 
         return AnalysisResult(

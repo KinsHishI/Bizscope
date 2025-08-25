@@ -69,5 +69,5 @@ async def get_nearby_cafes(lat: float, lon: float, radius_m: int = 2000) -> List
             logger.error(f"[Kakao] 기타 오류: {e}")
             break
 
-    # 모든 시도 실패 → 폴백: 빈 리스트(상위 라우터가 DB데이터만 사용)
+    # 모든 시도 실패 -> 폴백: 빈 리스트(상위 라우터가 DB데이터만 사용)
     return []

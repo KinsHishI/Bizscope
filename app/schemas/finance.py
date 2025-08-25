@@ -47,7 +47,6 @@ class FinanceForecastResponse(BaseModel):
     explain: List[str]
 
 
-# AUTO (lat/lon 옵션)
 class FinanceForecastAutoRequest(BaseModel):
     series: list[FinancePoint]
     capex: int

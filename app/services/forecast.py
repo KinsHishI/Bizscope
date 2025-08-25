@@ -80,7 +80,7 @@ def _make_items_with_conf(
     return out
 
 
-# ── 분기 내 월 가중치 & 랜덤 노이즈 ──────────────────────────────────────────
+# ── 분기 내 월 가중치 ──────────────────────────────────────────
 def _quarter_weights() -> list[float]:
     return [0.98, 1.00, 1.02]
 
@@ -160,7 +160,7 @@ def _predict_ml_recursive(
     return np.array(preds, dtype=float)
 
 
-# ── AUTO: 수성구 유동인구 → 월 분할(가중치) → 외생변수 결합 + 경량 ML 앙상블 ──
+# ── AUTO: 수성구 유동인구 -> 월 분할(가중치) -> 외생변수 결합 + 경량 ML 앙상블 ──
 async def forecast_finance_auto(
     db: AsyncSession,
     req: FinanceForecastAutoRequest,
