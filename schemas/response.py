@@ -16,6 +16,7 @@ class ReasoningDetails(BaseModel):
 
 class AnalysisResult(BaseModel):
     suitability_score: int
-   
     reasoning: ReasoningDetails 
     competitor_analysis: CompetitorAnalysis
+    lat: float 
+    lng: float

@@ -27,7 +27,7 @@
 
 1.  **프로젝트 클론 및 가상환경 설정**
     ```bash
-    git clone <레포지토리_주소>
+    git clnge <레포지토리_주소>
     cd BizScope
     python3 -m venv venv
     source venv/bin/activate
@@ -75,7 +75,7 @@
     {
       "budget": 50000000,
       "lat": 35.8427,
-      "lon": 128.627
+      "lng": 128.627
     }
     ```
 * **Success Response (200 OK)**:
