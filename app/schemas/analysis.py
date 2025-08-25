@@ -1,11 +1,12 @@
 # app/schemas/analysis.py
+
 from pydantic import BaseModel, Field
 from typing import Dict, Optional
 
 
 class AnalysisRequest(BaseModel):  # ← 이름만 변경
     lat: float
-    lon: float
+    lng: float
     radius_m: int = Field(2000, ge=100, le=5000)
 
 
@@ -23,10 +24,12 @@ class ReasoningDetails(BaseModel):
     radius_km: int = 2
 
 
-class AnalysisResult(BaseModel):  # ← 이름만 변경
+class AnalysisResult(BaseModel):
     suitability_score: int
     reasoning: ReasoningDetails
     competitor_analysis: CompetitorAnalysis
+    lat: float
+    lng: float
 
 
 AnalysisAreaRequest = AnalysisRequest

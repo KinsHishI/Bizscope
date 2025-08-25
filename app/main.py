@@ -14,10 +14,25 @@ from app.schemas.analysis import (
     CompetitorAnalysis,
     ReasoningDetails,
 )
+from app.services.analyzer import (
+    get_nearby_stores,
+    get_nearby_cafes,
+    save_stores_data,
+    analyze_business_area,
+)
+from fastapi.middleware.cors import CORSMiddleware
 
 import traceback
 
 app = FastAPI(title=settings.APP_NAME)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
@@ -38,7 +53,6 @@ async def on_startup():
         asyncio.create_task(_bg_bootstrap())
 
 
-# 필요한 라우터만 include
 app.include_router(finance.router)
 app.include_router(admin.router)
 app.include_router(analysis.router)
@@ -53,10 +67,10 @@ async def health():
 @app.post("/analysis/area", response_model=AnalysisResult)
 def analyze_area(request: AnalysisRequest):
     try:
-        stores_from_db = get_nearby_stores(request.lat, request.lon)
+        stores_from_db = get_nearby_stores(request.lat, request.lng)
 
         if not stores_from_db:
-            cafes = get_nearby_cafes(request.lat, request.lon)
+            cafes = get_nearby_cafes(request.lat, request.lng)
             if cafes:
                 save_stores_data(
                     [
@@ -74,7 +88,7 @@ def analyze_area(request: AnalysisRequest):
             stores_to_analyze = stores_from_db
 
         score, reasoning_details, competitor_info_dict = analyze_business_area(
-            request.lat, request.lon, stores_to_analyze
+            request.lat, request.lng, stores_to_analyze
         )
 
         competitor_analysis_model = CompetitorAnalysis(**competitor_info_dict)
@@ -84,6 +98,8 @@ def analyze_area(request: AnalysisRequest):
             suitability_score=int(score),
             reasoning=reasoning_details_model,
             competitor_analysis=competitor_analysis_model,
+            lat=request.lat,
+            lng=request.lng,
         )
 
     except Exception as e:

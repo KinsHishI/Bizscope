@@ -1,4 +1,5 @@
 # app/services/exog.py
+
 from __future__ import annotations
 from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +21,7 @@ async def get_latest_quarter_foot_traffic(
     lat: Optional[float] = None,
     lon: Optional[float] = None,
     radius_m: float = 200.0,
-    agg: str = "avg",  # 'avg' or 'sum'
+    agg: str = "avg",
 ) -> Optional[int]:
     """
     최신 분기의 foot_traffic을 하나의 스칼라로 반환.
@@ -28,7 +29,7 @@ async def get_latest_quarter_foot_traffic(
     - 없으면 테이블 전체의 최신 레코드들 중 평균 사용
     """
     if lat is not None and lon is not None:
-        d = radius_m / 111_000  # degree per meter 근사
+        d = radius_m / 111_000
         stmt = select(
             func.avg(Place.foot_traffic)
             if agg == "avg"
@@ -38,7 +39,6 @@ async def get_latest_quarter_foot_traffic(
             Place.lon.between(lon - d, lon + d),
         )
     else:
-        # 전체 평균(또는 합계)
         stmt = select(func.avg(Place.foot_traffic))
 
     res = await db.execute(stmt)

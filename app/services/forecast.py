@@ -1,4 +1,5 @@
 # app/services/forecast.py
+
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence
@@ -17,7 +18,6 @@ from app.db.crud import get_places_bbox
 from app.db.session import AsyncSession
 from app.db.crud import get_ftq_recent_near
 
-# 가벼운 ML
 from sklearn.ensemble import RandomForestRegressor
 
 
@@ -82,7 +82,6 @@ def _make_items_with_conf(
 
 # ── 분기 내 월 가중치 & 랜덤 노이즈 ──────────────────────────────────────────
 def _quarter_weights() -> list[float]:
-    # Q 내 1/2/3번째 달 → 0.98 / 1.00 / 1.02
     return [0.98, 1.00, 1.02]
 
 
@@ -95,7 +94,6 @@ def _apply_monthly_weights(start_period: pd.Period, h: int, base: Iterable[float
 
 
 def _random_monthly_noise(h: int) -> np.ndarray:
-    # 0.90 ~ 1.10 범위의 균등분포, 호출 때마다 달라짐(시드 없음)
     return np.random.default_rng().uniform(0.90, 1.10, size=h)
 
 
@@ -187,12 +185,12 @@ async def forecast_finance_auto(
     debug_reason: Optional[str] = None
 
     if lat is not None and lon is not None:
-        # 1-A) 먼저 FTQ에서 최신 분기값 시도
-        base_quarter_pop = await get_ftq_recent_near(db, lat, lon, deg=0.1)  # ~3km
+        # 1-1) 먼저 FTQ에서 최신 분기값 시도
+        base_quarter_pop = await get_ftq_recent_near(db, lat, lon, deg=0.1)
 
         if base_quarter_pop is None:
-            # 1-B) FTQ 없음 → Place.foot_traffic 로 폴백
-            d = 0.002  # 약 220m
+            # 1-2) FTQ 없음 → Place.foot_traffic 로 폴백
+            d = 0.002
             places = await get_places_bbox(db, lat - d, lon - d, lat + d, lon + d)
             foot_vals = [
                 int(p.foot_traffic) for p in places if (p.foot_traffic or 0) > 0
@@ -202,7 +200,7 @@ async def forecast_finance_auto(
                 base_quarter_pop = max(foot_vals)
                 debug_reason = "FTQ 없음 → Place.foot_traffic로 대체"
             else:
-                # 1-C) 그래도 없으면, 카페 수 기반 아주 러프한 추정
+                # 1-3) 그래도 없으면, 카페 수 기반 추정
                 cafe_count = sum(
                     1 for p in places if (p.category or "").startswith("카페")
                 )
@@ -212,7 +210,7 @@ async def forecast_finance_auto(
                 else:
                     debug_reason = "근방 FTQ/Place 데이터 모두 없음"
 
-        # 1-D) exog 시계열 구성
+        # 1-4) exog 시계열 구성
         if base_quarter_pop and base_quarter_pop > 0:
             w = _quarter_weights()
             hist_vals = [
@@ -273,7 +271,7 @@ async def forecast_finance_auto(
     lower_sarimax = ci.iloc[:, 0].values
     upper_sarimax = ci.iloc[:, 1].values
 
-    # 3) 가벼운 ML 학습/예측 (데이터 충분할 때만)
+    # 3) 가벼운 ML 학습/예측
     mean_ens = mean_sarimax.copy()
     lower_ens = lower_sarimax.copy()
     upper_ens = upper_sarimax.copy()
@@ -287,12 +285,11 @@ async def forecast_finance_auto(
             )
             alpha = 0.6  # SARIMAX 60%, ML 40%
             mean_ens = alpha * mean_sarimax + (1 - alpha) * mean_ml
-            # CI는 SARIMAX를 기준으로만 유지(단순)
+            # CI는 SARIMAX를 기준으로 유지
             lower_ens = lower_sarimax * alpha
             upper_ens = upper_sarimax * alpha
             model_name += " + RF(0.4) ensemble"
     except Exception:
-        # ML이 실패해도 SARIMAX만으로 진행
         pass
 
     # 4) 월별 가중치 + 랜덤 노이즈
