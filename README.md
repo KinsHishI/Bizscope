@@ -118,44 +118,44 @@
 * **Request Body**:
     ```json
     {
-      "series": [
-        { "month": "2024-10", "sales": 12000000 },
-        { "month": "2024-11", "sales": 12500000 },
-        { "month": "2024-12", "sales": 13000000 },
-        { "month": "2025-01", "sales": 14000000 }
-      ],
-    "horizon_months": 6,
-    "capex": 50000000,
-     "lat": 35.856,
-     "lon": 128.622
+        "series": [
+            { "month": "2024-10", "sales": 12000000 },
+            { "month": "2024-11", "sales": 12500000 },
+            { "month": "2024-12", "sales": 13000000 },
+            { "month": "2025-01", "sales": 14000000 }
+          ],
+        "horizon_months": 6,
+        "capex": 50000000,
+        "lat": 35.856,
+        "lon": 128.622
     }
     ```
 * **Success Response (200 OK)**:
     ```json
     {
-      "forecast": [
-        {
-          "month": "2025-04",
-          "sales": 14072364,
-          "sales_pi": [13227283, 13232716],
-          "cogs": 4925327,
-          "labor": 3200000,
-          "rent": 1500000,
-          "utilities": 500000,
-          "marketing": 200000,
-          "profit": 3747037
-        },
+        "forecast": [
+            {
+                "month": "2025-04",
+                "sales": 14072364,
+                "sales_pi": [13227283, 13232716],
+                "cogs": 4925327,
+                "labor": 3200000,
+                "rent": 1500000,
+                "utilities": 500000,
+                "marketing": 200000,
+                "profit": 3747037
+            },
         ...
-      ],
-      "payback_month": 6,
-      "payback_prob_12m": 0.998,
-      "model": "SARIMAX + exog(foot_traffic) + Monthly weights + Random noise",
-      "top_features": null,
-      "explain": [
-        "원가율 0.35, 인건비 base 3,200,000",
-        "유동인구: 분기→월 분배 시 (0.98/1.00/1.02) 가중치 적용",
-        "출력 예측치에 월별 랜덤 노이즈(0.90~1.10) 적용",
-        "주변 기준 분기 유동인구(최댓값) ≈ 12,000"
-      ]
+        ],
+        "payback_month": 6,
+        "payback_prob_12m": 0.998,
+        "model": "SARIMAX + exog(foot_traffic) + Monthly weights + Random noise",
+        "top_features": null,
+        "explain": [
+            "원가율 0.35, 인건비 base 3,200,000",
+            "유동인구: 분기→월 분배 시 (0.98/1.00/1.02) 가중치 적용",
+            "출력 예측치에 월별 랜덤 노이즈(0.90~1.10) 적용",
+            "주변 기준 분기 유동인구(최댓값) ≈ 12,000"
+        ]
     }
     ```
