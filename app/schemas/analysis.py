@@ -1,34 +1,33 @@
+# app/schemas/analysis.py
 from pydantic import BaseModel, Field
-from typing import List, Literal
+from typing import Dict, Optional
 
 
-class AnalysisRequest(BaseModel):
+class AnalysisRequest(BaseModel):  # ← 이름만 변경
     lat: float
     lon: float
-    radius_m: int = Field(500, ge=100, le=2000)  # 분석 반경
-    budget_month_rent: int | None = None
-    candidate_categories: List[str] = ["카페", "분식", "편의점"]
+    radius_m: int = Field(2000, ge=100, le=5000)
 
 
-class FitItem(BaseModel):
-    category: str
-    score: int  # 0~100
+class CompetitorAnalysis(BaseModel):
+    count: int
+    types: Dict[str, int]
+    avg_rating: Optional[float] = None
 
 
-class SalesPred(BaseModel):
-    monthly: int
-    ci: tuple[int, int]
+class ReasoningDetails(BaseModel):
+    competitor_count: int
+    franchise_count: int
+    personal_count: int
+    floating_population: int
+    radius_km: int = 2
 
 
-class ROI(BaseModel):
-    payback_month: int
-    margin_rate: float
+class AnalysisResult(BaseModel):  # ← 이름만 변경
+    suitability_score: int
+    reasoning: ReasoningDetails
+    competitor_analysis: CompetitorAnalysis
 
 
-class AnalysisResponse(BaseModel):
-    area_features: dict
-    fit: List[FitItem]
-    sales_pred: SalesPred
-    costs: dict
-    roi: ROI
-    explain: List[str]
+AnalysisAreaRequest = AnalysisRequest
+AnalysisAreaResponse = AnalysisResult
