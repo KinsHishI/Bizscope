@@ -20,7 +20,7 @@ class Place(Base):
     rent_month = Column(Integer, default=0)  # 월 임대료
     deposit = Column(Integer, default=0)
 
-    # 최근 적재한 유동인구(요약)
+    # 최근 적재 유동인구
     foot_traffic = Column(Integer, default=0)
 
     # 지오쿼리 최적화
@@ -31,8 +31,8 @@ class IngestLog(Base):
     __tablename__ = "ingest_logs"
 
     id = Column(Integer, primary_key=True)
-    source = Column(String, index=True)  # 예: "suseong_2024Q2"
-    status = Column(String)  # "done" | "error:..."
+    source = Column(String, index=True)
+    status = Column(String)
 
 
 class FootTrafficQuarter(Base):

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-# 모델 파일/폴더 경로 관리 (학습/서빙 공용)
+# 모델 파일/폴더 경로 관리
 BASE = Path("models")
 BASE.mkdir(exist_ok=True, parents=True)
 

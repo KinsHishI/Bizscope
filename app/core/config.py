@@ -8,27 +8,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # 앱 메타
-    APP_NAME: str = "CarryOn"
+    # 기본
+    APP_NAME: str = "Bizscope"
     ENV: str = "dev"
-
-    # DB
     DATABASE_URL: str = "sqlite+aiosqlite:///./space.db"
-
-    # 모델/파일 저장 디렉터리
     MODEL_DIR: str = "./models"
 
-    # 외부 API 키 (옵션)
+    # 외부 API 키들
+    KAKAO_API_KEY: str | None = None  # Kakao REST API Key
     MAP_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
 
-    # 수성구 공공데이터 (유동인구)
+    # 수성구 공공데이터
     SUSEONG_API_KEY: str | None = None
     SUSEONG_API_URL: str = (
         "https://apis.data.go.kr/3460000/suseongfpa/viewmarketpopudetail"
     )
 
-    # 서버 기동 시 자동 적재 옵션
+    # 부팅 시 자동 적재 옵션
     AUTO_INGEST_SUSEONG: bool = False
     SUSEONG_BOOTSTRAP_YEAR_FROM: int = 2020
     SUSEONG_BOOTSTRAP_YEAR_TO: int = 2025
@@ -37,10 +34,7 @@ class Settings(BaseSettings):
     SUSEONG_PAGES: int = 10
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,  # .env 의 소문자 키도 허용
-        extra="ignore",  # 알 수 없는 키 무시
+        env_file=".env", extra="ignore"  # .env에 추가 필드 무시
     )
 
 

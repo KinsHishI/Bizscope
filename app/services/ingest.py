@@ -56,10 +56,10 @@ async def ingest_suseong_foot_traffic(
     db: AsyncSession, *, year: int, quarter: int, pages: int = 5, page_size: int = 100
 ) -> dict:
     """
-    공공데이터포털(수성구 상권 유동인구) 호출 → items 파싱 → Place 테이블 upsert
+    수성구 유동인구 API 호출 → items 파싱 → Place & FTQ에 upsert
     """
     if not settings.SUSEONG_API_KEY:
-        raise RuntimeError("SUSEONG_API_KEY가 설정되어 있지 않습니다(.env 확인).")
+        raise RuntimeError("SUSEONG_API_KEY가 설정되어 있지 않습니다")
 
     total_ingested = 0
     async with httpx.AsyncClient(timeout=20) as client:
@@ -76,32 +76,52 @@ async def ingest_suseong_foot_traffic(
             r.raise_for_status()
             data = r.json()
 
-            # 실제 응답 구조에 맞게 items 경로 보정
-            items = (
-                data.get("response", {}).get("body", {}).get("items")
-                or data.get("items")
-                or data.get("data")
-                or []
-            )
+            # 응답 구조 방어적 파싱
+            items_node = data.get("response", {}).get("body", {}).get("items")
+            if isinstance(items_node, dict):
+                items = items_node.get("item", [])
+            elif isinstance(items_node, list):
+                items = items_node
+            else:
+                items = []
+
             if not items:
                 break
 
             for it in items:
+                # 이름
                 name = str(it.get("marketNm") or it.get("name") or "상권").strip()
-                lat = float(it.get("lat") or it.get("latitude") or 0.0)
-                lon = float(it.get("lon") or it.get("longitude") or 0.0)
-                pop = int(
-                    float(
-                        it.get("popuCnt") or it.get("flowCnt") or it.get("total") or 0
-                    )
-                )
+
+                # 좌표
+                lat_raw = it.get("lat") or it.get("latitude") or it.get("위도")
+                lon_raw = it.get("lon") or it.get("longitude") or it.get("경도")
+                try:
+                    lat = float(lat_raw)
+                    lon = float(lon_raw)
+                except (TypeError, ValueError):
+                    continue
                 if not lat or not lon:
                     continue
 
+                # 유동인구(정수)
+                pop_raw = it.get("popuCnt") or it.get("flowCnt") or it.get("total")
+                try:
+                    pop = int(float(pop_raw))
+                except (TypeError, ValueError):
+                    pop = 0
+
+                # upsert (두 테이블 다)
                 await crud.upsert_place_with_foot_traffic(
                     db, name=name, lat=lat, lon=lon, foot_traffic=pop
                 )
+                await crud.upsert_ftq(
+                    db, year=year, quarter=quarter, lat=lat, lon=lon, pop=pop
+                )
+
                 total_ingested += 1
+
+            # 배치 커밋 (페이지마다)
+            await db.commit()
 
     return {
         "status": "ok",

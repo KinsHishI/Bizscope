@@ -7,7 +7,7 @@ from typing import List, Optional
 
 
 class FinancePoint(BaseModel):
-    month: str  # "YYYY-MM"
+    month: str
     sales: int
 
 
@@ -49,10 +49,12 @@ class FinanceForecastResponse(BaseModel):
 
 # AUTO (lat/lon 옵션)
 class FinanceForecastAutoRequest(BaseModel):
-    series: List[FinancePoint] = Field(min_length=3)
+    series: list[FinancePoint]
     capex: int
     horizon_months: int = 12
-    assumptions: Optional[FinanceAssumption] = None
+    assumptions: dict | None = None
+    lat: float | None = None
+    lon: float | None = None
 
 
 class FinanceForecastAutoResponse(FinanceForecastResponse):

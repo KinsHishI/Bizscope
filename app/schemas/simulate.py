@@ -7,7 +7,7 @@ class ROISimRequest(BaseModel):
     cogs_rate: float = 0.35
     labor: int = 3000000
     other_cost: int = 500000
-    capex: int = 30000000  # 인테리어+권리금
+    capex: int = 30000000  # 인테리어 + 권리금
 
 
 class ROISimResponse(BaseModel):
